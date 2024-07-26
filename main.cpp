@@ -4,15 +4,19 @@
 #include <iostream>
 #include <raylib.h>
 #include <rlgl.h>
+#include <string>
 
 const double pi = 3.1415926535897932384626433832795028841971693993751;
 const double G = 4 * pow(pi, 2); // AU^3 MO^-1 Year^-2
-const double dt = 0.1;
-
+const double constTimeStep = pow(10, -3);
+const int nOfBodies = 2;
+double speed = 100;
 double B[7][6];
 
-double CH[] = {16.0 / 135,      0,         6656.0 / 12825,
-               28561.0 / 56430, -9.0 / 50, 2.0 / 55};
+double CH[] = {0,         16.0 / 135, 0, 6656.0 / 12825, 28561.0 / 56430,
+               -9.0 / 50, 2.0 / 55};
+void print(std::string out) { std::cout << out << "\n"; }
+std::string str(double num) { return std::to_string(num); }
 
 struct vector {
   double x;
@@ -28,9 +32,9 @@ struct vector {
   }
   vector opposite() { return vector(-x, -y, -z); }
   void Print() {
-    std::cout << "vector.x: " << x << ";\n";
-    std::cout << "vector.y: " << y << ";\n";
-    std::cout << "vector.z: " << z << ";\n";
+    print("vector.x: " + str(x));
+    print("vector.y: " + str(y));
+    print("vector.z: " + str(z));
   }
 };
 
@@ -50,13 +54,13 @@ struct bs_struct {
   bs_struct(vector p, vector v, double m) : position(p), velocity(v), mass(m) {}
   bs_struct() : position({0, 0}), velocity({0, 0}), mass(0){};
   void Print() {
-    std::cout << "PRINT bs_struct: START--------------------";
-    std::cout << "position: \n";
+    print("PRINT bs_struct: START--------------------");
+    print("position:");
     position.Print();
-    std::cout << "velocity: \n";
+    print("velocity:");
     velocity.Print();
-    std::cout << "mass: " << mass << "\n";
-    std::cout << "PRINT bs_struct: END----------------------";
+    print("mass: " + str(mass));
+    print("PRINT bs_struct: END----------------------");
   }
 };
 
@@ -68,12 +72,12 @@ struct ds_struct {
   ds_struct() : velocity({0, 0}), acceleration({0, 0}){};
 
   void Print() {
-    std::cout << "PRINT ds_struct: START--------------------\n";
-    std::cout << "velocity: \n";
+    print("PRINT ds_struct: START--------------------");
+    print("velocity:");
     velocity.Print();
-    std::cout << "acceleration: \n";
+    print("acceleration:");
     acceleration.Print();
-    std::cout << "PRINT ds_struct: END----------------------\n";
+    print("PRINT ds_struct: END----------------------");
   }
 };
 
@@ -83,7 +87,7 @@ vectorf winCenter = vectorf(winSize.x / 2, winSize.y / 2);
 double drawScale = 50;
 
 int circleSegments = 32;
-const int nOfBodies = 3;
+
 vectorf camera_startPos = vectorf{0, 0, 250};
 vectorf camera_startTarget = vectorf(0, 0, 0);
 vectorf camera_up = vectorf(0, 1, 0);
@@ -96,14 +100,16 @@ Texture texture;
 //   Setup 2 bodies   //
 ////////////////////////
 
-void g2b(bs_struct cbs[]) {
+std::array<bs_struct, nOfBodies> g2b(std::array<bs_struct, nOfBodies> cbs) {
   cbs[0] = bs_struct({-1, 0}, {0, -1}, 1);
   cbs[1] = bs_struct({1, 0}, {0, 1}, 1);
+  return cbs;
 }
-void g3b(std::array<bs_struct, nOfBodies> cbs) {
+std::array<bs_struct, nOfBodies> g3b(std::array<bs_struct, nOfBodies> cbs) {
   cbs[0] = bs_struct({-1, 0}, {0, -1}, 1);
   cbs[1] = bs_struct({1, 0}, {0, 1}, 1);
   cbs[2] = bs_struct({0, 1}, {0, 0}, 1);
+  return cbs;
 }
 
 void drawGrid(int slices, float spacing, Color color) {
@@ -242,23 +248,55 @@ std::array<bs_struct, nOfBodies> addBs(std::array<bs_struct, nOfBodies> bs1,
   }
   return out;
 }
-
-void RKF45(std::array<bs_struct, nOfBodies> cbs) {
+std::array<bs_struct, nOfBodies> RKF45(std::array<bs_struct, nOfBodies> cbs) {
+  double dt = constTimeStep * GetFrameTime() * speed;
   std::array<std::array<bs_struct, nOfBodies>, 7> k;
+  /*
   for (int i = 1; i < 7; i++) {
-    std::cout << i << "\n";
     std::array<bs_struct, nOfBodies> dsfArg = {};
-    for (int j = 0; j < i; j++) {
-      std::cout << "i: " << i << "j: " << j << "\n";
+    for (int j = 1; j < i; j++) {
+      std::cout << "i: " << i << " j: " << j << "\n";
+      dsfArg = addBs(dsfArg, multiplyBsByScalar(k[j], B[i][j]));
     }
-  }
+  }*/
   k[1] = multiplyDsByTime(deltaStateFunction(cbs), dt);
   k[2] = multiplyDsByTime(
       deltaStateFunction(addBs(cbs, multiplyBsByScalar(k[1], B[2][1]))), dt);
   k[3] = multiplyDsByTime(
       deltaStateFunction(addBs(addBs(cbs, multiplyBsByScalar(k[1], B[3][1])),
-                               multiplyBsByScalar(k[1], B[3][2]))),
+                               multiplyBsByScalar(k[2], B[3][2]))),
       dt);
+  k[4] =
+      multiplyDsByTime(deltaStateFunction(addBs(
+                           addBs(addBs(cbs, multiplyBsByScalar(k[1], B[4][1])),
+                                 multiplyBsByScalar(k[2], B[4][2])),
+                           multiplyBsByScalar(k[3], B[4][3]))),
+                       dt);
+  k[5] = multiplyDsByTime(
+      deltaStateFunction(
+          addBs(addBs(addBs(addBs(cbs, multiplyBsByScalar(k[1], B[5][1])),
+                            multiplyBsByScalar(k[2], B[5][2])),
+                      multiplyBsByScalar(k[3], B[5][3])),
+                multiplyBsByScalar(k[4], B[5][4]))),
+      dt);
+  k[6] = multiplyDsByTime(
+      deltaStateFunction(
+          addBs(addBs(addBs(addBs(addBs(cbs, multiplyBsByScalar(k[1], B[6][1])),
+                                  multiplyBsByScalar(k[2], B[6][2])),
+                            multiplyBsByScalar(k[3], B[6][3])),
+                      multiplyBsByScalar(k[4], B[6][4])),
+                multiplyBsByScalar(k[5], B[6][5]))),
+      dt);
+
+  std::array<bs_struct, nOfBodies> ansBs =
+      addBs(addBs(addBs(addBs(addBs(multiplyBsByScalar(k[1], CH[1]),
+                                    multiplyBsByScalar(k[2], CH[2])),
+                              multiplyBsByScalar(k[3], CH[3])),
+                        multiplyBsByScalar(k[4], CH[4])),
+                  multiplyBsByScalar(k[5], CH[5])),
+            multiplyBsByScalar(k[6], CH[6]));
+  cbs = addBs(cbs, ansBs);
+  return cbs;
 }
 
 int main() {
@@ -280,13 +318,12 @@ int main() {
   B[6][5] = -11.0 / 40;
 
   std::array<bs_struct, nOfBodies> currentBodiesState;
-  vector v = vector(1, 2);
 
   g3b(currentBodiesState);
-  /*
+
   SetTraceLogLevel(4);
   InitWindow(winSize.x, winSize.y, "");
-  SetTargetFPS(100);
+  // SetTargetFPS(100);
 
   // setup camera
 
@@ -300,34 +337,39 @@ int main() {
   Image img = GenImageColor(32, 32, WHITE);
   Texture texture = LoadTextureFromImage(img);
   UnloadImage(img);
-  */
-  std::array<ds_struct, nOfBodies> dsf = {};
-  RKF45(currentBodiesState);
-  /*
-  while (!WindowShouldClose()) {
 
+  // std::array<ds_struct, nOfBodies> dsf = {};
+
+  currentBodiesState = g2b(currentBodiesState);
+  while (!WindowShouldClose()) {
     BeginDrawing();
     ClearBackground(BLACK);
     DrawFPS(0, 0);
+    std::string txt =
+        "dt: " + str(log10(constTimeStep * GetFrameTime() * speed));
+    print(txt);
+
     BeginMode3D(camera);
     rlPushMatrix();
     rlRotatef(90, 1, 0, 0);
     drawGrid(1000, 10, WHITE);
     rlPopMatrix();
-
-    for (int i = 0;
-         i < sizeof(currentBodiesState) / sizeof(currentBodiesState[0]); i++) {
+    for (int i = 0; i < nOfBodies; i++) {
+      print("i=" + str(i));
+      print("cbs:");
+      currentBodiesState[i].Print();
       drawCircle(vecToVecf(currentBodiesState[i].position), 5, bodyColor[i],
                  drawScale);
     }
     EndMode3D();
     EndDrawing();
+    currentBodiesState = RKF45(currentBodiesState);
   }
 
   UnloadTexture(texture);
   CloseWindow();
-  */
-  // std::cout << "------------WINDOW CLOSED ----------------------\n";
+
+  std::cout << "------------WINDOW CLOSED ----------------------\n";
   std::cout << "sizeof vector: " << sizeof(vector(1, 2, 3)) << "\n";
   std::cout << "sizeof bs_struct: " << sizeof(bs_struct({1, 2}, {3, 4}, 5))
             << "\n";
