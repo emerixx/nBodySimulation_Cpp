@@ -373,7 +373,7 @@ int main() {
 
     std::cout << "------------WINDOW CLOSED ----------------------\n";
   }
-  for (int i = 0; i < 1000; i++) {
+  for (int i = 0; i < 1000000; i++) {
     currentBodiesState = RKF45(currentBodiesState);
   }
   currentBodiesState[0].Print();
