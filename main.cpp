@@ -8,8 +8,9 @@
 
 const double pi = 3.1415926535897932384626433832795028841971693993751;
 const double G = 4 * pow(pi, 2); // AU^3 MO^-1 Year^-2
-const double constTimeStep = pow(10, -3);
+const double constTimeStep = pow(10, -4);
 const int nOfBodies = 2;
+const bool hasDE = false;
 double speed = 100;
 double B[7][6];
 
@@ -250,15 +251,19 @@ std::array<bs_struct, nOfBodies> addBs(std::array<bs_struct, nOfBodies> bs1,
 }
 std::array<bs_struct, nOfBodies> RKF45(std::array<bs_struct, nOfBodies> cbs) {
   double dt = constTimeStep * GetFrameTime() * speed;
+  if (!hasDE) {
+    dt = constTimeStep;
+  }
   std::array<std::array<bs_struct, nOfBodies>, 7> k;
-  /*
+
   for (int i = 1; i < 7; i++) {
-    std::array<bs_struct, nOfBodies> dsfArg = {};
+    std::array<bs_struct, nOfBodies> dsfArg = cbs;
     for (int j = 1; j < i; j++) {
-      std::cout << "i: " << i << " j: " << j << "\n";
       dsfArg = addBs(dsfArg, multiplyBsByScalar(k[j], B[i][j]));
     }
-  }*/
+    k[i] = multiplyDsByTime(deltaStateFunction(dsfArg), dt);
+  }
+  /*
   k[1] = multiplyDsByTime(deltaStateFunction(cbs), dt);
   k[2] = multiplyDsByTime(
       deltaStateFunction(addBs(cbs, multiplyBsByScalar(k[1], B[2][1]))), dt);
@@ -287,7 +292,7 @@ std::array<bs_struct, nOfBodies> RKF45(std::array<bs_struct, nOfBodies> cbs) {
                       multiplyBsByScalar(k[4], B[6][4])),
                 multiplyBsByScalar(k[5], B[6][5]))),
       dt);
-
+*/
   std::array<bs_struct, nOfBodies> ansBs =
       addBs(addBs(addBs(addBs(addBs(multiplyBsByScalar(k[1], CH[1]),
                                     multiplyBsByScalar(k[2], CH[2])),
@@ -318,58 +323,60 @@ int main() {
   B[6][5] = -11.0 / 40;
 
   std::array<bs_struct, nOfBodies> currentBodiesState;
-
-  g3b(currentBodiesState);
-
-  SetTraceLogLevel(4);
-  InitWindow(winSize.x, winSize.y, "");
-  // SetTargetFPS(100);
-
-  // setup camera
-
-  camera.position = {camera_startPos.x, camera_startPos.y, camera_startPos.z};
-  camera.target = {camera_startTarget.x, camera_startTarget.y,
-                   camera_startTarget.z};
-  camera.up = {camera_up.x, camera_up.y, camera_up.z};
-  camera.fovy = camera_startFovy;
-  camera.projection = CAMERA_PERSPECTIVE;
-
-  Image img = GenImageColor(32, 32, WHITE);
-  Texture texture = LoadTextureFromImage(img);
-  UnloadImage(img);
-
-  // std::array<ds_struct, nOfBodies> dsf = {};
-
   currentBodiesState = g2b(currentBodiesState);
-  while (!WindowShouldClose()) {
-    BeginDrawing();
-    ClearBackground(BLACK);
-    DrawFPS(0, 0);
-    std::string txt =
-        "dt: " + str(log10(constTimeStep * GetFrameTime() * speed));
-    print(txt);
+  if (hasDE) {
 
-    BeginMode3D(camera);
-    rlPushMatrix();
-    rlRotatef(90, 1, 0, 0);
-    drawGrid(1000, 10, WHITE);
-    rlPopMatrix();
-    for (int i = 0; i < nOfBodies; i++) {
-      print("i=" + str(i));
-      print("cbs:");
-      currentBodiesState[i].Print();
-      drawCircle(vecToVecf(currentBodiesState[i].position), 5, bodyColor[i],
-                 drawScale);
+    SetTraceLogLevel(4);
+    InitWindow(winSize.x, winSize.y, "");
+    // SetTargetFPS(100);
+
+    // setup camera
+
+    camera.position = {camera_startPos.x, camera_startPos.y, camera_startPos.z};
+    camera.target = {camera_startTarget.x, camera_startTarget.y,
+                     camera_startTarget.z};
+    camera.up = {camera_up.x, camera_up.y, camera_up.z};
+    camera.fovy = camera_startFovy;
+    camera.projection = CAMERA_PERSPECTIVE;
+
+    Image img = GenImageColor(32, 32, WHITE);
+    Texture texture = LoadTextureFromImage(img);
+    UnloadImage(img);
+
+    while (!WindowShouldClose()) {
+      BeginDrawing();
+      ClearBackground(BLACK);
+      DrawFPS(0, 0);
+      std::string txt =
+          "dt: " + str(log10(constTimeStep * GetFrameTime() * speed));
+      print(txt);
+
+      BeginMode3D(camera);
+      rlPushMatrix();
+      rlRotatef(90, 1, 0, 0);
+      drawGrid(1000, 10, WHITE);
+      rlPopMatrix();
+      for (int i = 0; i < nOfBodies; i++) {
+        print("i=" + str(i));
+        print("cbs:");
+        currentBodiesState[i].Print();
+        drawCircle(vecToVecf(currentBodiesState[i].position), 5, bodyColor[i],
+                   drawScale);
+      }
+      EndMode3D();
+      EndDrawing();
+      currentBodiesState = RKF45(currentBodiesState);
     }
-    EndMode3D();
-    EndDrawing();
+
+    UnloadTexture(texture);
+    CloseWindow();
+
+    std::cout << "------------WINDOW CLOSED ----------------------\n";
+  }
+  for (int i = 0; i < 1000; i++) {
     currentBodiesState = RKF45(currentBodiesState);
   }
-
-  UnloadTexture(texture);
-  CloseWindow();
-
-  std::cout << "------------WINDOW CLOSED ----------------------\n";
+  currentBodiesState[0].Print();
   std::cout << "sizeof vector: " << sizeof(vector(1, 2, 3)) << "\n";
   std::cout << "sizeof bs_struct: " << sizeof(bs_struct({1, 2}, {3, 4}, 5))
             << "\n";
