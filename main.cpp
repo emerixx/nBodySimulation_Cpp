@@ -1,3 +1,4 @@
+#include "vctr.h"
 #include <array>
 #include <cmath>
 #include <cstdio>
@@ -10,7 +11,7 @@ const double pi = 3.1415926535897932384626433832795028841971693993751;
 const double G = 4 * pow(pi, 2); // AU^3 MO^-1 Year^-2
 const double constTimeStep = pow(10, -4);
 const int nOfBodies = 2;
-const bool hasDE = false;
+const bool hasDE = true;
 double speed = 100;
 double B[7][6];
 
@@ -19,34 +20,6 @@ double CH[] = {0,         16.0 / 135, 0, 6656.0 / 12825, 28561.0 / 56430,
 void print(std::string out) { std::cout << out << "\n"; }
 std::string str(double num) { return std::to_string(num); }
 
-struct vector {
-  double x;
-  double y;
-  double z;
-  vector(double x_in, double y_in) : x(x_in), y(y_in), z(0) {}
-  vector(double x_in, double y_in, double z_in) : x(x_in), y(y_in), z(z_in) {}
-  vector() : x(0), y(0), z(0) {}
-  double magnitude() { return sqrt(pow(x, 2) + pow(y, 2) + pow(z, 2)); }
-  vector unit() {
-    double mag = magnitude();
-    return vector(x / mag, y / mag, z / mag);
-  }
-  vector opposite() { return vector(-x, -y, -z); }
-  void Print() {
-    print("vector.x: " + str(x));
-    print("vector.y: " + str(y));
-    print("vector.z: " + str(z));
-  }
-};
-
-struct vectorf {
-  float x;
-  float y;
-  float z;
-  vectorf(float x_in, float y_in) : x(x_in), y(y_in), z(0) {}
-  vectorf(float x_in, float y_in, float z_in) : x(x_in), y(y_in), z(z_in) {}
-  vectorf() : x(0), y(0), z(0) {}
-};
 struct bs_struct {
   vector position;
   vector velocity;
@@ -57,9 +30,9 @@ struct bs_struct {
   void Print() {
     print("PRINT bs_struct: START--------------------");
     print("position:");
-    position.Print();
+    print(position);
     print("velocity:");
-    velocity.Print();
+    print(velocity);
     print("mass: " + str(mass));
     print("PRINT bs_struct: END----------------------");
   }
@@ -75,9 +48,9 @@ struct ds_struct {
   void Print() {
     print("PRINT ds_struct: START--------------------");
     print("velocity:");
-    velocity.Print();
+    print(velocity);
     print("acceleration:");
-    acceleration.Print();
+    print(acceleration);
     print("PRINT ds_struct: END----------------------");
   }
 };
@@ -169,7 +142,7 @@ void drawCircle(vectorf centerOffset, float radius, Color color, float scale) {
   }
   rlEnd();
 }
-
+/*
 vector subtractVec(vector vec1, vector vec2) {
   return vector(vec1.x - vec2.x, vec1.y - vec2.y, vec1.z - vec2.z);
 }
@@ -182,9 +155,7 @@ vector divideVec(vector v, double s) {
 vector multiplyVec(vector v, double s) {
   return vector(v.x * s, v.y * s, v.z * s);
 }
-
-vectorf vecToVecf(vector v) { return vectorf(v.x, v.y); }
-
+*/
 std::array<ds_struct, nOfBodies>
 deltaStateFunction(std::array<bs_struct, nOfBodies> bsLoc) {
   vector ForceArr[nOfBodies][nOfBodies];
@@ -194,28 +165,28 @@ deltaStateFunction(std::array<bs_struct, nOfBodies> bsLoc) {
       if (i == j)
         continue;
       if (i > j) {
-        ForceArr[i][j] = ForceArr[j][i].opposite();
+        ForceArr[i][j] = opposite(ForceArr[j][i]);
         continue;
       }
-      vector distance = subtractVec(bsLoc[j].position, bsLoc[i].position);
-      double distanceMagnitude = distance.magnitude();
-      vector direction = distance.unit();
+      vector distance = bsLoc[j].position - bsLoc[i].position;
+      double distanceMagnitude = magnitude(distance);
+      vector direction = normalize(distance);
       double forceMagnitude = 0;
       if (distanceMagnitude > 0) {
         forceMagnitude =
             (G * bsLoc[i].mass * bsLoc[j].mass) / pow(distanceMagnitude, 2);
       }
-      ForceArr[i][j] = multiplyVec(direction, forceMagnitude);
+      ForceArr[i][j] = direction * forceMagnitude;
     }
     for (int j = 0; j < nOfBodies; j++) {
       if (i == j)
         continue;
-      Force[i] = addVec(Force[i], ForceArr[i][j]);
+      Force[i] = Force[i] + ForceArr[i][j];
     }
   }
   std::array<ds_struct, nOfBodies> out;
   for (int i = 0; i < nOfBodies; i++) {
-    out[i] = ds_struct(bsLoc[i].velocity, divideVec(Force[i], bsLoc[i].mass));
+    out[i] = ds_struct(bsLoc[i].velocity, Force[i] / bsLoc[i].mass);
   }
   return out;
 }
@@ -224,8 +195,7 @@ std::array<bs_struct, nOfBodies>
 multiplyDsByTime(std::array<ds_struct, nOfBodies> ds, double t) {
   std::array<bs_struct, nOfBodies> out;
   for (int i = 0; i < nOfBodies; i++) {
-    out[i] = bs_struct(multiplyVec(ds[i].velocity, t),
-                       multiplyVec(ds[i].acceleration, t), 0);
+    out[i] = bs_struct(ds[i].velocity * t, ds[i].acceleration * t, 0);
   }
   return out;
 }
@@ -233,9 +203,8 @@ std::array<bs_struct, nOfBodies>
 multiplyBsByScalar(std::array<bs_struct, nOfBodies> bs, double scalar) {
   std::array<bs_struct, nOfBodies> out;
   for (int i = 0; i < nOfBodies; i++) {
-    out[i] =
-        bs_struct(multiplyVec(bs[i].position, scalar),
-                  multiplyVec(bs[i].velocity, scalar), bs[i].mass * scalar);
+    out[i] = bs_struct(bs[i].position * scalar, bs[i].velocity * scalar,
+                       bs[i].mass * scalar);
   }
   return out;
 }
@@ -243,9 +212,9 @@ std::array<bs_struct, nOfBodies> addBs(std::array<bs_struct, nOfBodies> bs1,
                                        std::array<bs_struct, nOfBodies> bs2) {
   std::array<bs_struct, nOfBodies> out;
   for (int i = 0; i < nOfBodies; i++) {
-    out[i] = bs_struct(addVec(bs1[i].position, bs2[i].position),
-                       addVec(bs1[i].velocity, bs2[i].velocity),
-                       bs1[i].mass + bs2[i].mass);
+    out[i] =
+        bs_struct(bs1[i].position + bs2[i].position,
+                  bs1[i].velocity + bs2[i].velocity, bs1[i].mass + bs2[i].mass);
   }
   return out;
 }
@@ -329,7 +298,6 @@ int main() {
     SetTraceLogLevel(4);
     InitWindow(winSize.x, winSize.y, "");
     // SetTargetFPS(100);
-
     // setup camera
 
     camera.position = {camera_startPos.x, camera_startPos.y, camera_startPos.z};
@@ -348,7 +316,7 @@ int main() {
       ClearBackground(BLACK);
       DrawFPS(0, 0);
       std::string txt =
-          "dt: " + str(log10(constTimeStep * GetFrameTime() * speed));
+          "log10(dt): " + str(log10(constTimeStep * GetFrameTime() * speed));
       print(txt);
 
       BeginMode3D(camera);
