@@ -1,4 +1,5 @@
-#include "vctr.h"
+#include "global_variables.hpp"
+#include "vector.hpp"
 #include <array>
 #include <cmath>
 #include <cstdio>
@@ -7,12 +8,6 @@
 #include <rlgl.h>
 #include <string>
 
-const double pi = 3.1415926535897932384626433832795028841971693993751;
-const double G = 4 * pow(pi, 2); // AU^3 MO^-1 Year^-2
-const double constTimeStep = pow(10, -4);
-const int nOfBodies = 2;
-const bool hasDE = true;
-double speed = 100;
 double B[7][6];
 
 double CH[] = {0,         16.0 / 135, 0, 6656.0 / 12825, 28561.0 / 56430,
@@ -21,52 +16,44 @@ void print(std::string out) { std::cout << out << "\n"; }
 std::string str(double num) { return std::to_string(num); }
 
 struct bs_struct {
-  vector position;
-  vector velocity;
+  mml::vector2 position;
+  mml::vector2 velocity;
   double mass;
 
-  bs_struct(vector p, vector v, double m) : position(p), velocity(v), mass(m) {}
+  bs_struct(mml::vector2 p, mml::vector2 v, double m)
+      : position(p), velocity(v), mass(m) {}
   bs_struct() : position({0, 0}), velocity({0, 0}), mass(0){};
   void Print() {
     print("PRINT bs_struct: START--------------------");
     print("position:");
-    print(position);
+    printvec(position);
     print("velocity:");
-    print(velocity);
+    printvec(velocity);
     print("mass: " + str(mass));
     print("PRINT bs_struct: END----------------------");
   }
 };
 
 struct ds_struct {
-  vector velocity;
-  vector acceleration;
+  mml::vector2 velocity;
+  mml::vector2 acceleration;
 
-  ds_struct(vector v, vector a) : velocity(v), acceleration(a) {}
+  ds_struct(mml::vector2 v, mml::vector2 a) : velocity(v), acceleration(a) {}
   ds_struct() : velocity({0, 0}), acceleration({0, 0}){};
 
   void Print() {
     print("PRINT ds_struct: START--------------------");
     print("velocity:");
-    print(velocity);
+    printvec(velocity);
     print("acceleration:");
-    print(acceleration);
+    printvec(acceleration);
     print("PRINT ds_struct: END----------------------");
   }
 };
 
-Color bodyColor[] = {RED, BLUE, GREEN};
-vectorf winSize = vectorf(1600, 900);
-vectorf winCenter = vectorf(winSize.x / 2, winSize.y / 2);
-double drawScale = 50;
-
-int circleSegments = 32;
-
-vectorf camera_startPos = vectorf{0, 0, 250};
-vectorf camera_startTarget = vectorf(0, 0, 0);
-vectorf camera_up = vectorf(0, 1, 0);
-float camera_startFovy = 60;
-
+const int nOfBodies = 2;
+const double pi = global.pi;
+const double G = global.G;
 Camera camera;
 Image img;
 Texture texture;
@@ -103,9 +90,9 @@ void drawGrid(int slices, float spacing, Color color) {
   }
   rlEnd();
 }
-
+/*
 void drawCircleOld(vector centerOffset, double radius, Color color) {
-  int segments = circleSegments;
+  int segments = global.circleSegments;
   double step = 2 * pi / segments;
   double angle = 0;
   rlBegin(RL_TRIANGLES);
@@ -118,15 +105,16 @@ void drawCircleOld(vector centerOffset, double radius, Color color) {
     angle += step;
   }
   rlEnd();
-}
-void drawCircle(vectorf centerOffset, float radius, Color color, float scale) {
-  int segments = circleSegments;
+}*/
+void drawCircle(mml::vector2 centerOffset, float radius, Color color,
+                float scale) {
+  int segments = global.circleSegments;
   double step = 2 * pi / segments;
   double angle = 0;
-  vectorf center = {centerOffset.x * scale, centerOffset.y * scale};
-  vectorf vertex2 = {sinf(angle + step) * (float)radius,
-                     cosf(angle + step) * (float)radius};
-  vectorf vertex2old = {0, (float)radius};
+  mml::vector2 center = {centerOffset.x * scale, centerOffset.y * scale};
+  mml::vector2 vertex2 = {sinf(angle + step) * (float)radius,
+                          cosf(angle + step) * (float)radius};
+  mml::vector2 vertex2old = {0, (float)radius};
   rlBegin(RL_TRIANGLES);
   rlSetTexture(texture.id);
   for (int i = 0; i < segments; i++) {
@@ -142,35 +130,22 @@ void drawCircle(vectorf centerOffset, float radius, Color color, float scale) {
   }
   rlEnd();
 }
-/*
-vector subtractVec(vector vec1, vector vec2) {
-  return vector(vec1.x - vec2.x, vec1.y - vec2.y, vec1.z - vec2.z);
-}
-vector addVec(vector v1, vector v2) {
-  return vector(v1.x + v2.x, v1.y + v2.y, v1.z + v2.z);
-}
-vector divideVec(vector v, double s) {
-  return vector(v.x / s, v.y / s, v.z / s);
-}
-vector multiplyVec(vector v, double s) {
-  return vector(v.x * s, v.y * s, v.z * s);
-}
-*/
+
 std::array<ds_struct, nOfBodies>
 deltaStateFunction(std::array<bs_struct, nOfBodies> bsLoc) {
-  vector ForceArr[nOfBodies][nOfBodies];
-  vector Force[nOfBodies];
+  mml::vector2 ForceArr[nOfBodies][nOfBodies];
+  mml::vector2 Force[nOfBodies];
   for (int i = 0; i < nOfBodies; i++) {
     for (int j = 0; j < nOfBodies; j++) {
       if (i == j)
         continue;
       if (i > j) {
-        ForceArr[i][j] = opposite(ForceArr[j][i]);
+        ForceArr[i][j] = ForceArr[j][i].opposite();
         continue;
       }
-      vector distance = bsLoc[j].position - bsLoc[i].position;
-      double distanceMagnitude = magnitude(distance);
-      vector direction = normalize(distance);
+      mml::vector2 distance = bsLoc[j].position - bsLoc[i].position;
+      double distanceMagnitude = distance.mag();
+      mml::vector2 direction = distance.unit();
       double forceMagnitude = 0;
       if (distanceMagnitude > 0) {
         forceMagnitude =
@@ -219,9 +194,9 @@ std::array<bs_struct, nOfBodies> addBs(std::array<bs_struct, nOfBodies> bs1,
   return out;
 }
 std::array<bs_struct, nOfBodies> RKF45(std::array<bs_struct, nOfBodies> cbs) {
-  double dt = constTimeStep * GetFrameTime() * speed;
-  if (!hasDE) {
-    dt = constTimeStep;
+  double dt = global.constTimeStep * GetFrameTime() * global.speed;
+  if (!global.hasDE) {
+    dt = global.constTimeStep;
   }
   std::array<std::array<bs_struct, nOfBodies>, 7> k;
 
@@ -232,36 +207,6 @@ std::array<bs_struct, nOfBodies> RKF45(std::array<bs_struct, nOfBodies> cbs) {
     }
     k[i] = multiplyDsByTime(deltaStateFunction(dsfArg), dt);
   }
-  /*
-  k[1] = multiplyDsByTime(deltaStateFunction(cbs), dt);
-  k[2] = multiplyDsByTime(
-      deltaStateFunction(addBs(cbs, multiplyBsByScalar(k[1], B[2][1]))), dt);
-  k[3] = multiplyDsByTime(
-      deltaStateFunction(addBs(addBs(cbs, multiplyBsByScalar(k[1], B[3][1])),
-                               multiplyBsByScalar(k[2], B[3][2]))),
-      dt);
-  k[4] =
-      multiplyDsByTime(deltaStateFunction(addBs(
-                           addBs(addBs(cbs, multiplyBsByScalar(k[1], B[4][1])),
-                                 multiplyBsByScalar(k[2], B[4][2])),
-                           multiplyBsByScalar(k[3], B[4][3]))),
-                       dt);
-  k[5] = multiplyDsByTime(
-      deltaStateFunction(
-          addBs(addBs(addBs(addBs(cbs, multiplyBsByScalar(k[1], B[5][1])),
-                            multiplyBsByScalar(k[2], B[5][2])),
-                      multiplyBsByScalar(k[3], B[5][3])),
-                multiplyBsByScalar(k[4], B[5][4]))),
-      dt);
-  k[6] = multiplyDsByTime(
-      deltaStateFunction(
-          addBs(addBs(addBs(addBs(addBs(cbs, multiplyBsByScalar(k[1], B[6][1])),
-                                  multiplyBsByScalar(k[2], B[6][2])),
-                            multiplyBsByScalar(k[3], B[6][3])),
-                      multiplyBsByScalar(k[4], B[6][4])),
-                multiplyBsByScalar(k[5], B[6][5]))),
-      dt);
-*/
   std::array<bs_struct, nOfBodies> ansBs =
       addBs(addBs(addBs(addBs(addBs(multiplyBsByScalar(k[1], CH[1]),
                                     multiplyBsByScalar(k[2], CH[2])),
@@ -274,7 +219,6 @@ std::array<bs_struct, nOfBodies> RKF45(std::array<bs_struct, nOfBodies> cbs) {
 }
 
 int main() {
-
   B[2][1] = 1.0 / 4.0;
   B[3][1] = 3.0 / 32;
   B[3][2] = 9.0 / 32;
@@ -293,18 +237,17 @@ int main() {
 
   std::array<bs_struct, nOfBodies> currentBodiesState;
   currentBodiesState = g2b(currentBodiesState);
-  if (hasDE) {
+  if (global.hasDE) {
 
     SetTraceLogLevel(4);
-    InitWindow(winSize.x, winSize.y, "");
+    InitWindow(global.winSize.x, global.winSize.y, "");
     // SetTargetFPS(100);
     // setup camera
 
-    camera.position = {camera_startPos.x, camera_startPos.y, camera_startPos.z};
-    camera.target = {camera_startTarget.x, camera_startTarget.y,
-                     camera_startTarget.z};
-    camera.up = {camera_up.x, camera_up.y, camera_up.z};
-    camera.fovy = camera_startFovy;
+    camera.position = global.camera_startPos;
+    camera.target = global.camera_startTarget;
+    camera.up = global.camera_up;
+    camera.fovy = global.camera_startFovy;
     camera.projection = CAMERA_PERSPECTIVE;
 
     Image img = GenImageColor(32, 32, WHITE);
@@ -316,7 +259,8 @@ int main() {
       ClearBackground(BLACK);
       DrawFPS(0, 0);
       std::string txt =
-          "log10(dt): " + str(log10(constTimeStep * GetFrameTime() * speed));
+          "log10(dt): " +
+          str(log10(global.constTimeStep * GetFrameTime() * global.speed));
       print(txt);
 
       BeginMode3D(camera);
@@ -325,11 +269,8 @@ int main() {
       drawGrid(1000, 10, WHITE);
       rlPopMatrix();
       for (int i = 0; i < nOfBodies; i++) {
-        print("i=" + str(i));
-        print("cbs:");
-        currentBodiesState[i].Print();
-        drawCircle(vecToVecf(currentBodiesState[i].position), 5, bodyColor[i],
-                   drawScale);
+        drawCircle(currentBodiesState[i].position, 5, global.bodyColor[i],
+                   global.drawScale);
       }
       EndMode3D();
       EndDrawing();
@@ -345,7 +286,7 @@ int main() {
     currentBodiesState = RKF45(currentBodiesState);
   }
   currentBodiesState[0].Print();
-  std::cout << "sizeof vector: " << sizeof(vector(1, 2, 3)) << "\n";
+  std::cout << "sizeof vector: " << sizeof(mml::vector2(1, 2)) << "\n";
   std::cout << "sizeof bs_struct: " << sizeof(bs_struct({1, 2}, {3, 4}, 5))
             << "\n";
 

@@ -18,6 +18,7 @@ int main() {
   sb n = {4, 5, 6};
   std::cout << m + n << "\n";
   std::cout << n + m << "\n";
+  std::cout << 18 << "\n";
   std::cout << "hello world\n";
   return 0;
 }
